@@ -37,12 +37,15 @@ address 0xb8cd9a4ab7aee0651c82a5e553e9333b11cad30d17cd3ac6dd28ea16d602147d{
         const MARKETPLACE_FEE_PERCENT: u64 = 2; // 2% fee
 
         // TODO# 6: Initialize Marketplace        
-        public entry fun initialize(account: &signer) {
-            let marketplace = Marketplace {
-                nfts: vector::empty<NFT>()
-            };
-            move_to(account, marketplace);
-        }
+       public entry fun initialize(account: &signer) {
+    if (!exists<Marketplace>(signer::address_of(account))) {
+        let marketplace = Marketplace {
+            nfts: vector::empty<NFT>()
+        };
+        move_to(account, marketplace);
+    };}
+
+
 
         // TODO# 7: Check Marketplace Initialization
         #[view]
@@ -433,6 +436,110 @@ public fun get_active_auctions(
     
     active_auctions
 }
+public entry fun transfer_nft(
+    account: &signer,
+    marketplace_addr: address,
+    nft_id: u64,
+    recipient: address
+) acquires Marketplace {
+    let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
+    let nft_ref = vector::borrow_mut(&mut marketplace.nfts, nft_id);
+    
+    // Verify ownership and valid recipient
+    assert!(nft_ref.owner == signer::address_of(account), 500); // Not the owner
+    assert!(recipient != @0x0, 501); // Invalid recipient address
+    assert!(nft_ref.owner != recipient, 502); // Cannot transfer to self
+    assert!(!nft_ref.for_sale, 503); // Cannot transfer listed NFT
+    
+    // Update ownership
+    nft_ref.owner = recipient;
+    nft_ref.for_sale = false;
+    nft_ref.price = 0;
+}
+
+// Batch transfer function
+public entry fun batch_transfer_nfts(
+    account: &signer,
+    marketplace_addr: address,
+    nft_ids: vector<u64>,
+    recipient: address
+) acquires Marketplace {
+    let i = 0;
+    let len = vector::length(&nft_ids);
+    
+    while (i < len) {
+        let nft_id = *vector::borrow(&nft_ids, i);
+        transfer_nft(account, marketplace_addr, nft_id, recipient);
+        i = i + 1;
+    }
+}
+
+// View function to get transfer history
+#[view]
+public fun get_nft_transfers(
+    marketplace_addr: address,
+    nft_id: u64
+): vector<address> acquires Marketplace {
+    let marketplace = borrow_global<Marketplace>(marketplace_addr);
+    let nft = vector::borrow(&marketplace.nfts, nft_id);
+    
+    // Return the current owner
+    let transfers = vector::empty<address>();
+    vector::push_back(&mut transfers, nft.owner);
+    transfers
+}
+
+// Verify if address can receive NFTs
+#[view]
+public fun can_receive_nfts(addr: address): bool {
+    addr != @0x0
+}
+
+// Get all NFTs owned by an address
+#[view]
+public fun get_owned_nfts(
+    marketplace_addr: address,
+    owner_addr: address
+): vector<u64> acquires Marketplace {
+    let marketplace = borrow_global<Marketplace>(marketplace_addr);
+    let owned_nfts = vector::empty<u64>();
+    let i = 0;
+    let len = vector::length(&marketplace.nfts);
+    
+    while (i < len) {
+        let nft = vector::borrow(&marketplace.nfts, i);
+        if (nft.owner == owner_addr) {
+            vector::push_back(&mut owned_nfts, nft.id);
+        };
+        i = i + 1;
+    };
+    
+    owned_nfts
+}
+
+
+public entry fun clear_marketplace(account: &signer) acquires Marketplace {
+    let marketplace_addr = signer::address_of(account);
+    assert!(exists<Marketplace>(marketplace_addr), 600);
+    
+    // Get the old marketplace
+    let old_marketplace = move_from<Marketplace>(marketplace_addr);
+    let Marketplace { nfts } = old_marketplace;
+    
+    // Create new empty marketplace
+    let new_marketplace = Marketplace {
+        nfts: vector::empty<NFT>()
+    };
+    
+    // Move the new empty marketplace to the account
+    move_to(account, new_marketplace);
+    
+    // Return the old NFTs vector to properly clean up resources
+    move_to(account, Marketplace { nfts });
+}
+
+
+
 
 
     }
