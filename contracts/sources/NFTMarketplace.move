@@ -242,7 +242,6 @@ address 0xb8cd9a4ab7aee0651c82a5e553e9333b11cad30d17cd3ac6dd28ea16d602147d{
             nft_ids
         }
 
-        // Add these new structures after the existing structs
 
 struct Auction has store {
     nft_id: u64,
@@ -261,7 +260,7 @@ struct AuctionStore has key {
 }
 
 // Add these constants at the top with other constants
-const MINIMUM_AUCTION_DURATION: u64 = 3600; // 1 hour in seconds
+const MINIMUM_AUCTION_DURATION: u64 = 60; 
 const MINIMUM_BID_INCREMENT: u64 = 100; // Minimum bid increment in APT
 
 // Add these error codes at the top
