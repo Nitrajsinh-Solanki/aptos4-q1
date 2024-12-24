@@ -524,5 +524,36 @@ move_to(account, new_marketplace)                ;
 move_to(account, Marketplace { nfts })                       ;
 }
 
+
+
+
+public entry fun purchase_nft_with_tip(
+    account: &signer,
+    marketplace_addr: address,
+    nft_id: u64,
+    payment: u64,
+    tip_amount: u64
+) acquires Marketplace {
+    let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
+    let nft_ref = vector::borrow_mut(&mut marketplace.nfts, nft_id);
+
+    assert!(nft_ref.for_sale, 400); // NFT is not for sale
+    assert!(payment >= nft_ref.price, 401); // Insufficient payment
+    assert!(tip_amount >= 0, 402); // Invalid tip amount
+
+    // Calculate marketplace fee
+    let fee = (nft_ref.price * MARKETPLACE_FEE_PERCENT) / 100;
+    let seller_revenue = payment - fee + tip_amount;
+
+    // Transfer payment to the seller and fee to the marketplace
+    coin::transfer<aptos_coin::AptosCoin>(account, nft_ref.owner, seller_revenue);
+    coin::transfer<aptos_coin::AptosCoin>(account, marketplace_addr, fee);
+
+    // Transfer ownership
+    nft_ref.owner = signer::address_of(account);
+    nft_ref.for_sale = false;
+    nft_ref.price = 0;
+}
+
 }
 }
