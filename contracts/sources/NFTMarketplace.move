@@ -1,5 +1,5 @@
 // TODO                                                                     # 1: Define Module and Marketplace Address
-address 0xab37efef9c72f53321b0a6c0ba5685c87e2cb077649c4c3f3955fd6d5bf3c0c2{
+address 0xed990159b07f1958216ec51360f9734f4d1f43522d97b3c66f1214699c107932{
 
 module NFTMarketplace {
 use 0x1::signer         ;
@@ -18,8 +18,12 @@ uri: vector<u8>,
 price: u64,
 for_sale: bool,
 rarity: u8, // 1 for common, 2 for rare, 3 for epic, etc.
-listing_date: u64
+listing_date: u64,
+creator: address,
+    royalty_percentage: u64,
 }
+const DEFAULT_ROYALTY_PERCENTAGE: u64 = 5; // 5% royalty
+const MAX_ROYALTY_PERCENTAGE: u64 = 15; // 15% maximum royalty
 
 // TODO                      # 3: Define Marketplace Structure
 struct Marketplace has key {
@@ -52,24 +56,81 @@ exists<Marketplace>(marketplace_addr)
 }
 
 // TODO                                                                                                                                    # 8: Mint New NFT
-public entry fun mint_nft(account: &signer, name: vector<u8>, description: vector<u8>, uri: vector<u8>, rarity: u8) acquires Marketplace {
-let marketplace = borrow_global_mut<Marketplace>(signer::address_of(account))                                                              ;
-let nft_id = vector::length(&marketplace.nfts)                                                                                             ;
+public entry fun mint_nft(
+    account: &signer,
+    name: vector<u8>,
+    description: vector<u8>,
+    uri: vector<u8>,
+    rarity: u8,
+    royalty_percentage: u64
+) acquires Marketplace {
+    assert!(royalty_percentage <= MAX_ROYALTY_PERCENTAGE, 103);
+    
+    let marketplace = borrow_global_mut<Marketplace>(signer::address_of(account));
+    let nft_id = vector::length(&marketplace.nfts);
+    let creator_address = signer::address_of(account);
 
-let new_nft = NFT {
-id: nft_id,
-owner: signer::address_of(account),
-name,
-description,
-uri,
-price: 0,
-for_sale: false,
-rarity,
-listing_date: 0
-}                                   ;
+    let new_nft = NFT {
+        id: nft_id,
+        owner: creator_address,
+        creator: creator_address,
+        name,
+        description,
+        uri,
+        price: 0,
+        for_sale: false,
+        rarity,
+        listing_date: 0,
+        royalty_percentage,
+    };
 
-vector::push_back(&mut marketplace.nfts, new_nft) ;
+    vector::push_back(&mut marketplace.nfts, new_nft);
 }
+
+public entry fun purchase_nft_with_royalty(
+    account: &signer,
+    marketplace_addr: address,
+    nft_id: u64,
+    payment: u64,
+    tip_amount: u64
+) acquires Marketplace {
+    let marketplace = borrow_global_mut<Marketplace>(marketplace_addr);
+    let nft_ref = vector::borrow_mut(&mut marketplace.nfts, nft_id);
+
+    assert!(nft_ref.for_sale, 400);
+    assert!(payment >= nft_ref.price, 401);
+    assert!(tip_amount >= 0, 402);
+
+    // Calculate fees and royalties
+    let marketplace_fee = (nft_ref.price * MARKETPLACE_FEE_PERCENT) / 100;
+    let royalty_amount = (nft_ref.price * nft_ref.royalty_percentage) / 100;
+    let seller_revenue = payment - marketplace_fee - royalty_amount + tip_amount;
+
+    // Transfer payments
+    coin::transfer<aptos_coin::AptosCoin>(account, nft_ref.owner, seller_revenue);
+    coin::transfer<aptos_coin::AptosCoin>(account, marketplace_addr, marketplace_fee);
+    
+    // Transfer royalties to creator if it's a secondary sale
+    if (nft_ref.owner != nft_ref.creator) {
+        coin::transfer<aptos_coin::AptosCoin>(account, nft_ref.creator, royalty_amount)
+    };
+
+    // Transfer ownership
+    nft_ref.owner = signer::address_of(account);
+    nft_ref.for_sale = false;
+    nft_ref.price = 0
+}
+
+#[view]
+public fun get_nft_royalty_info(
+    marketplace_addr: address,
+    nft_id: u64
+): (address, u64) acquires Marketplace {
+    let marketplace = borrow_global<Marketplace>(marketplace_addr);
+    let nft = vector::borrow(&marketplace.nfts, nft_id);
+    (nft.creator, nft.royalty_percentage)
+}
+
 
 // TODO                                                                                                                                                           # 9: View NFT Details
 #[view]
