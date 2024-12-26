@@ -773,5 +773,70 @@ i = i + 1                                          ;
 offer_indices
 }
 
+
+
+
+// Add these new functions to your existing NFTMarketplace module
+
+public entry fun transfer_apt(
+    account: &signer,
+    recipient: address,
+    amount: u64
+) {
+    // Validate amount and recipient
+    assert!(amount > 0, 700);                 // Invalid amount
+    assert!(recipient != @0x0, 701);          // Invalid recipient
+    assert!(recipient != signer::address_of(account), 702); // Cannot transfer to self
+
+    // Transfer APT tokens
+    coin::transfer<aptos_coin::AptosCoin>(
+        account,
+        recipient,
+        amount
+    );
+}
+
+// Batch transfer APT to multiple recipients
+public entry fun batch_transfer_apt(
+    account: &signer,
+    recipients: vector<address>,
+    amounts: vector<u64>
+) {
+    let recipients_len = vector::length(&recipients);
+    let amounts_len = vector::length(&amounts);
+    
+    // Validate input vectors have same length
+    assert!(recipients_len == amounts_len, 703);
+    
+    let i = 0;
+    while (i < recipients_len) {
+        let recipient = *vector::borrow(&recipients, i);
+        let amount = *vector::borrow(&amounts, i);
+        
+        transfer_apt(account, recipient, amount);
+        i = i + 1;
+    }
+}
+
+// View function to check APT balance
+#[view]
+public fun get_apt_balance(addr: address): u64 {
+    coin::balance<aptos_coin::AptosCoin>(addr)
+}
+
+// Transfer APT with memo (optional message)
+public entry fun transfer_apt_with_memo(
+    account: &signer,
+    recipient: address,
+    amount: u64,
+    _memo: vector<u8>  // Memo is stored in transaction history
+) {
+    transfer_apt(account, recipient, amount);
+}
+
+
+
+
+
 }
 }
